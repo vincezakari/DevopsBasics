@@ -1,0 +1,62 @@
+pipeline {
+    tools {
+        jdk 'myjava'
+        maven 'mymaven'
+    }
+    agent any
+    
+    environment {
+        DOCKER_HUB_CREDENTIALS = credentials('docker-cred') 
+        DOCKER_HUB_USERNAME = credentials('docker-username') // Jenkins credential ID for Docker Hub username
+        DOCKER_HUB_PASSWORD = credentials('docker-password') // Jenkins credential ID for Docker Hub password
+        DOCKER_IMAGE_NAME = 'docker-username/zumo-app' // Docker Hub username and image name
+        DOCKER_IMAGE_TAG = "${BUILD_NUMBER}" // Use Jenkins build number as the tag for the Docker image
+        DOCKERFILE_PATH  = './Dockerfile' // Update this with the correct path
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Cloning GitHub repository...'
+                git url: 'https://github.com/vincezakari/DevopsBasics.git', credentialsId: 'git-id'
+            }
+        }
+        stage('Compile') {
+            steps {
+                echo 'compiling..'
+                sh 'mvn compile'
+            }
+        }
+
+        stage('CodeReview') {
+            steps {
+                echo 'codeReview'
+                sh 'mvn pmd:pmd'
+            }
+        }
+        stage('Build Artifact') {
+            steps {
+                echo 'Building artifact...'
+                sh 'mvn clean package' // or any other build command to generate your artifact
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                echo 'Building Docker image...'
+                sh "docker build -t ${DOCKER_HUB_USERNAME}/zumo_repo:${DOCKER_IMAGE_TAG} -f ${DOCKERFILE_PATH} /var/lib/jenkins/workspace/zumo-pipe/webapp/target"
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                echo 'Pushing Docker image to Docker Hub...'
+                withCredentials([usernamePassword(credentialsId: 'docker-cred', usernameVariable: 'DOCKER_HUB_USERNAME', passwordVariable: 'DOCKER_HUB_PASSWORD')]) {
+                    sh "docker login -u ${DOCKER_HUB_USERNAME} -p ${DOCKER_HUB_PASSWORD}"
+                    sh "docker push ${DOCKER_HUB_USERNAME}/zumo_repo:${DOCKER_IMAGE_TAG}"
+                }
+            }
+        }
+    }
+}
+
